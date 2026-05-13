@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLATO Memory Palace — Penrose Tiling</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a12;font-family:'Segoe UI','SF Pro Display',system-ui,-apple-system,sans-serif;color:#e0e0e0}
+#app{width:100%;height:100%;position:relative}
+#canvas{display:block;cursor:grab;position:absolute;top:0;left:0}
+#canvas:active{cursor:grabbing}
+#ui{position:absolute;top:18px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:10px;align-items:center;pointer-events:none}
+#ui>*{pointer-events:auto}
+#search{width:320px;padding:10px 16px;border-radius:12px;border:1px solid #2a2a3e;background:rgba(14,14,28,0.85);backdrop-filter:blur(12px);color:#e0e0e0;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
+#search:focus{border-color:#7c5cfc;box-shadow:0 0 20px rgba(124,92,252,0.2)}
+#search::placeholder{color:#666}
+#controls{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:8px;align-items:center}
+#controls button{padding:8px 16px;border-radius:8px;border:1px solid #2a2a3e;background:rgba(14,14,28,0.85);backdrop-filter:blur(8px);color:#c0c0d0;font-size:13px;cursor:pointer;transition:all .2s;font-family:inherit}
+#controls button:hover{background:rgba(124,92,252,0.15);border-color:#7c5cfc;color:#fff}
+#controls button:active{transform:scale(0.95)}
+#controls .count{color:#888;font-size:12px;padding:0 8px;min-width:60px;text-align:center}
+#tooltip{position:absolute;z-index:20;display:none;background:rgba(10,10,18,0.92);backdrop-filter:blur(16px);border:1px solid #2a2a3e;border-radius:12px;padding:16px 20px;max-width:340px;pointer-events:none;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+#tooltip .tt-name{font-size:15px;font-weight:600;color:#e8e8f0;margin-bottom:4px}
+#tooltip .tt-domain{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:8px}
+#tooltip .tt-desc{font-size:13px;line-height:1.5;color:#b0b0c0}
+#tooltip .tt-conn{font-size:11px;color:#666;margin-top:8px;padding-top:8px;border-top:1px solid #1a1a2e}
+#detail{position:fixed;top:0;right:0;width:420px;height:100%;z-index:15;background:rgba(10,10,18,0.94);backdrop-filter:blur(20px);border-left:1px solid #1a1a2e;transform:translateX(100%);transition:transform .35s cubic-bezier(0.22,1,0.36,1);overflow-y:auto;padding:0;box-shadow:-8px 0 40px rgba(0,0,0,0.4)}
+#detail.open{transform:translateX(0)}
+#detail .d-header{position:sticky;top:0;background:rgba(10,10,18,0.96);backdrop-filter:blur(20px);padding:24px 28px 16px;border-bottom:1px solid #1a1a2e;z-index:2}
+#detail .d-close{float:right;background:none;border:none;color:#666;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .2s}
+#detail .d-close:hover{color:#fff;background:rgba(255,255,255,0.05)}
+#detail .d-name{font-size:22px;font-weight:700;color:#f0f0f8;margin-bottom:2px}
+#detail .d-domain{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#7c5cfc;font-weight:500}
+#detail .d-body{padding:20px 28px 40px}
+#detail .d-desc{font-size:14px;line-height:1.7;color:#b8b8c8;margin-bottom:20px}
+#detail .d-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#555;margin:16px 0 6px}
+#detail .d-tags{display:flex;flex-wrap:wrap;gap:6px}
+#detail .d-tag{padding:4px 10px;border-radius:6px;font-size:11px;background:rgba(124,92,252,0.1);border:1px solid rgba(124,92,252,0.2);color:#b0a0f0}
+#detail .d-conn-item{padding:8px 0;border-bottom:1px solid #141420;font-size:13px;color:#999;display:flex;align-items:center;gap:8px}
+#detail .d-conn-item .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+#detail .d-coords{font-size:11px;color:#555;margin-top:16px;font-family:'SF Mono','Fira Code',monospace}
+#detail::-webkit-scrollbar{width:4px}
+#detail::-webkit-scrollbar-track{background:transparent}
+#detail::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:4px}
+@keyframes glow-pulse{0%,100%{opacity:0.6}50%{opacity:1}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.glow{animation:glow-pulse 1.2s ease-in-out infinite}
+#title{position:absolute;top:20px;left:24px;z-index:5;pointer-events:none}
+#title h1{font-size:16px;font-weight:600;color:#d0d0e0;letter-spacing:1px;margin-bottom:2px}
+#title .sub{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:2px}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="title"><h1>PLATO Memory Palace</h1><div class="sub">Penrose P3 Tiling &middot; &phi;</div></div>
+<canvas id="canvas"></canvas>
+<div id="ui"><input id="search" type="text" placeholder="Search PLATO tiles..." spellcheck="false"></div>
+<div id="controls">
+<button id="zoom-in">+</button><button id="zoom-out">&minus;</button><button id="reset-view">&oblong; Reset</button>
+<span class="count" id="tile-count"></span>
+</div>
+<div id="tooltip"></div><div id="detail"></div>
+</div>
+<script>
+const TILES=[
+{id:"constraint-theory-eisenstein",name:"Constraint Theory: Eisenstein Integers",domain:"math",desc:"A new constraint satisfaction paradigm using Eisenstein integers and the cubic lattice. Represents constraints as linear equations over Z[omega] for 6-way symmetry, eliminating angular drift in geometric CSP solvers.",tags:["constraint-sat","geometry","algebra"],connections:["galois-foundations","geometry-vesica","eisenstein-bench"]},
+{id:"geometry-vesica",name:"Geometry: Vesica Piscis",domain:"math",desc:"Fundamental construction from intersecting equal circles. Root of the Euclidean geometric tradition. Generates sqrt(3) ratios, equilateral triangles, and the foundation for sacred geometry constraint systems.",tags:["geometry","euclidean","foundations"],connections:["constraint-theory-eisenstein","galois-foundations","vesica-geometry"]},
+{id:"floating-point-precision",name:"Floating Point Precision Analysis",domain:"systems",desc:"Systematic analysis of IEEE 754 floating point error accumulation in iterative solvers. Catalan-numeric methods for exact error bounds.",tags:["numerical","ieee754","error-analysis"],connections:["constraint-theory-eisenstein","eisenstein-bench"]},
+{id:"game-synchronization",name:"Game Synchronization Protocol",domain:"games",desc:"Deterministic lockstep synchronization for real-time multiplayer games. Uses constraint-based rollback with golden-ratio frame scheduling. Achieves 0-drift across 60+ peers.",tags:["multiplayer","netcode","determinism"],connections:["distributed-consensus","fleet-protocols","baton-protocol"]},
+{id:"galois-foundations",name:"Galois Theory Foundations",domain:"math",desc:"Field extensions, automorphism groups, and the fundamental theorem. Applied to constraint systems through fixed-field analysis.",tags:["algebra","galois","field-theory"],connections:["constraint-theory-eisenstein","geometry-vesica","plato-architecture"]},
+{id:"plato-architecture",name:"PLATO Architecture & Design",domain:"systems",desc:"Knowledge management system. Room-based semantic indexing with golden-ratio key distribution. Aperiodic retrieval patterns using Penrose-indexed memory spaces.",tags:["knowledge-management","architecture","indexing"],connections:["penrose-memory","fleet-protocols","seed-tile-architecture"]},
+{id:"fleet-protocols",name:"Cocapn Fleet Protocols",domain:"systems",desc:"Inter-agent communication protocols for the Cocapn fleet. I2I bottle delivery, vessel-based distribution, golden-ratio scheduling.",tags:["i2i","protocols","fleet-ops"],connections:["plato-architecture","distributed-consensus","lighthouse-protocol"]},
+{id:"cuda-kernels",name:"CUDA Kernel Library",domain:"systems",desc:"Optimized CUDA kernels for Eisenstein constraint matrix ops. Batched Z[omega] arithmetic, warp-level reductions, occupancy-optimized propagation.",tags:["cuda","gpu","hpc"],connections:["gpu-benchmarks","eisenstein-bench","constraint-theory-eisenstein"]},
+{id:"rust-async",name:"Rust Async Runtime Patterns",domain:"systems",desc:"Async Rust patterns for constraint solver pipelines. Canal-based work dist. with golden-ratio backoff. Zero-cost abstractions for distributed propagation.",tags:["rust","async","concurrency"],connections:["distributed-consensus","fleet-protocols"]},
+{id:"distributed-consensus",name:"Distributed Consensus Protocols",domain:"systems",desc:"BFT consensus for fleet agent coordination. Golden-ratio weighted voting for leaderless agreement. Penrose-indexed message ordering.",tags:["consensus","bft","distributed"],connections:["fleet-protocols","game-synchronization","baton-protocol"]},
+{id:"eisenstein-bench",name:"Eisenstein Constraint Benchmark",domain:"math",desc:"Benchmark suite for constraint satisfaction over Eisenstein integers. 200+ problem instances, Rust + CUDA implementations.",tags:["benchmark","constraint-sat","rust"],connections:["constraint-theory-eisenstein","cuda-kernels","floating-point-precision"]},
+{id:"temporal-intelligence",name:"Temporal Intelligence",domain:"ai",desc:"Temporal reasoning system. Golden-ratio scheduling for time-aware constraint propagation. LTL interpreted over Penrose-indexed state space.",tags:["temporal","reasoning","constraint-sat"],connections:["plato-architecture","constraint-theory-eisenstein","seed-tile-architecture"]},
+{id:"seed-tile-architecture",name:"Seed Tile Architecture",domain:"systems",desc:"Atomic knowledge units of PLATO. Self-contained knowledge cells with cross-references encoded as golden-ratio edge tags.",tags:["architecture","knowledge","atomic"],connections:["plato-architecture","penrose-memory","temporal-intelligence"]},
+{id:"lighthouse-protocol",name:"Lighthouse Protocol",domain:"systems",desc:"Beacon-based coordination. Golden-ratio interval beacons for clock sync and task scheduling. Drift detection and constraint re-evaluation triggers.",tags:["protocol","beacon","synchronization"],connections:["fleet-protocols","distributed-consensus","baton-protocol"]},
+{id:"dodecet-encoder",name:"Dodecet Encoder",domain:"math",desc:"Eisenstein integer encoding for 12-tone equal temperament. Maps pitch classes to Z[omega] lattice points. Constraint-based composition.",tags:["music","encoding","eisenstein"],connections:["constraint-theory-eisenstein","galois-foundations"]},
+{id:"baton-protocol",name:"Baton Protocol",domain:"systems",desc:"Token-passing coordination for fleet agent handoff. Golden-ratio token rotation. Used for GPU kernel dispatch and constraint pipeline coordination.",tags:["protocol","token","scheduling"],connections:["fleet-protocols","distributed-consensus","lighthouse-protocol"]},
+{id:"penrose-memory",name:"Penrose Memory Indexing",domain:"systems",desc:"Memory palace indexing. PLATO rooms addressed by position in a Penrose P3 tiling. Golden ratio ensures unique addresses and semantic clustering.",tags:["indexing","memory","penrose"],connections:["plato-architecture","seed-tile-architecture","geometry-vesica"]},
+{id:"vesica-geometry",name:"Vesica Geometry Toolkit",domain:"math",desc:"Computational geometry library for Vesica constructions. Generates constraint networks from circle intersections. Creates Penrose tilings.",tags:["geometry","toolkit","constraint"],connections:["geometry-vesica","penrose-memory","constraint-theory-eisenstein"]},
+{id:"gpu-benchmarks",name:"GPU Benchmark Suite",domain:"systems",desc:"GPU benchmarks for the Cocapn fleet. Eisenstein matrix ops, Penrose generation, constraint propagation. CUDA and Vulkan backends.",tags:["gpu","benchmark","cuda","vulkan"],connections:["cuda-kernels","eisenstein-bench"]},
+{id:"fleet-ops",name:"Fleet Operations Dashboard",domain:"systems",desc:"Real-time monitoring for the Cocapn fleet. Agent status, task queues, constraint solver health, Penrose memory palace heatmaps.",tags:["ops","monitoring","dashboard"],connections:["fleet-protocols","plato-architecture","distributed-consensus"]}
+];
+const DC={math:"#3b82f6",systems:"#22c55e",games:"#f59e0b",ai:"#a855f7"};
+const DN={math:"Mathematics",systems:"Systems & Engineering",games:"Games & Protocols",ai:"Artificial Intelligence"};
+
+// Penrose P3 via Robinson Triangle Deflation
+const PHI=(1+Math.sqrt(5))/2,PSI=1/PHI,PSI2=PSI*PSI;
+
+function inflateBL(A,B,C){
+  const D={x:PSI2*A.x+PSI*C.x,y:PSI2*A.y+PSI*C.y};
+  const E={x:PSI2*A.x+PSI*B.x,y:PSI2*A.y+PSI*B.y};
+  return[{type:"BL",A:E,B:D,C:A},{type:"BS",A:D,B:E,C:B},{type:"BL",A:C,B:E,C:B}];
+}
+function inflateBS(A,B,C){
+  const D={x:PSI*A.x+PSI2*B.x,y:PSI*A.y+PSI2*B.y};
+  return[{type:"BS",A:D,B:C,C:A},{type:"BL",A:C,B:D,C:B}];
+}
+
+function buildPenrose(iters){
+  const R=1,p=Math.PI;const pv=[],iv=[];
+  for(let i=0;i<5;i++){const a=i*72-90;pv.push({x:R*Math.cos(a*p/180),y:R*Math.sin(a*p/180)});iv.push({x:(R/(PHI*PHI))*Math.cos((a+36)*p/180),y:(R/(PHI*PHI))*Math.sin((a+36)*p/180)});}
+  let tris=[];
+  for(let i=0;i<5;i++){let n=(i+1)%5;tris.push({type:"BL",A:{x:0,y:0},B:pv[n],C:iv[i]});tris.push({type:"BL",A:{x:0,y:0},B:pv[n],C:pv[i]});}
+  for(let g=0;g<iters;g++){let n=[];for(let t of tris){let c=t.type==="BL"?inflateBL(t.A,t.B,t.C):inflateBS(t.A,t.B,t.C);for(let x of c)n.push(x);}tris=n;}
+  const bm=new Map();
+  for(let t of tris){let mx=(t.A.x+t.C.x)/2,my=(t.A.y+t.C.y)/2;let k=Math.round(mx*1e10)+","+Math.round(my*1e10);if(!bm.has(k))bm.set(k,[]);bm.get(k).push(t);}
+  const rh=[];
+  for(let[,pair]of bm){if(pair.length<2)continue;let t=pair[0];let mb={x:t.A.x+t.C.x-t.B.x,y:t.A.y+t.C.y-t.B.y};rh.push({v1:t.A,v2:t.B,v3:t.C,v4:mb,cx:(t.A.x+t.C.x)/2,cy:(t.A.y+t.C.y)/2,thick:t.type==="BL"});}
+  return rh;
+}
+
+const RHO=buildPenrose(6);
+const sr=RHO.map((r,i)=>({idx:i,dist:r.cx*r.cx+r.cy*r.cy})).sort((a,b)=>a.dist-b.dist);
+for(let i=0;i<TILES.length;i++){let idx=Math.floor(i*PHI)%RHO.length;TILES[i].rIdx=idx;TILES[i].color=DC[TILES[i].domain];}
+
+// Canvas
+const ca=document.getElementById("canvas"),cx=ca.getContext("2d");
+ca.width=window.innerWidth;ca.height=window.innerHeight;
+let vx=0,vy=0,z=100,dx,dy,dr=false,sel=-1,sq="",hov=-1;
+
+function rs(){ca.width=window.innerWidth;ca.height=window.innerHeight;drw();}
+window.addEventListener("resize",rs);
+
+function sv(r){return[r.v1,r.v2,r.v3,r.v4].map(v=>({x:v.x*z+ca.width/2+vx,y:v.y*z+ca.height/2+vy}));}
+
+function drw(){
+  cx.clearRect(0,0,ca.width,ca.height);
+  cx.fillStyle="#0a0a12";cx.fillRect(0,0,ca.width,ca.height);
+  // Grid
+  cx.strokeStyle="rgba(255,255,255,0.014)";cx.lineWidth=1;
+  let gs=50;for(let x=0;x<ca.width;x+=gs){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,ca.height);cx.stroke();}
+  for(let y=0;y<ca.height;y+=gs){cx.beginPath();cx.moveTo(0,y);cx.lineTo(ca.width,y);cx.stroke();}
+  // Edges
+  const drawn=new Set();
+  for(let t of TILES){if(!t.connections)continue;let r1=RHO[t.rIdx];if(!r1)continue;let p1=sv(r1);let c1x=(p1[0].x+p1[1].x+p1[2].x+p1[3].x)/4,c1y=(p1[0].y+p1[1].y+p1[2].y+p1[3].y)/4;for(let cid of t.connections){let k=[t.id,cid].sort().join("|");if(drawn.has(k))continue;drawn.add(k);let ct=TILES.find(tc=>tc.id===cid);if(!ct)continue;let r2=RHO[ct.rIdx];if(!r2)continue;let p2=sv(r2);let c2x=(p2[0].x+p2[1].x+p2[2].x+p2[3].x)/4,c2y=(p2[0].y+p2[1].y+p2[2].y+p2[3].y)/4;cx.beginPath();cx.moveTo(c1x,c1y);cx.lineTo(c2x,c2y);cx.strokeStyle="rgba(124,92,252,0.07)"+8+")";cx.lineWidth=(t.connections?0.5+Math.min(t.connections.length,5)*0.3:1);cx.stroke();}}
+  // Rhombi
+  for(let i=0;i<RHO.length;i++){
+    let r=RHO[i];
+    let ti=TILES.findIndex(t=>t.rIdx===i);
+    let ht=ti>=0,isSel=sel===ti,isHov=hov===ti,isSrch=false;
+    if(sq&&ht){let q=sq.toLowerCase();let t=TILES[ti];isSrch=t.name.toLowerCase().includes(q)||t.tags.some(tg=>tg.toLowerCase().includes(q))||t.domain.includes(q);}
+    let col,op=0.55;
+    if(isSel)op=1;else if(isSrch)op=1;else if(isHov)op=0.8;else if(!ht)op=0.12;
+    if(ht)col=TILES[ti].color;else{let h=i*137.5%360;col="hsl("+h+","+30+"%,"+Math.min(55,45+10*(i%3))+"%)";}
+    let pts=sv(r);
+    cx.beginPath();cx.moveTo(pts[0].x,pts[0].y);
+    for(let j=1;j<4;j++)cx.lineTo(pts[j].x,pts[j].y);
+    cx.closePath();
+    if(isSrch||isSel){cx.shadowColor=col;cx.shadowBlur=isSel?30:20;}
+    cx.fillStyle=col;cx.globalAlpha=op;cx.fill();cx.shadowBlur=0;
+    cx.strokeStyle=isSel?col:isHov?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.06)";
+    cx.lineWidth=isSel?2:0.5;cx.globalAlpha=isSel?1:0.4;cx.stroke();cx.globalAlpha=1;
+  }
+  // Labels
+  for(let i=0;i<TILES.length;i++){
+    let r=RHO[TILES[i].rIdx];if(!r)continue;
+    let pts=sv(r);let cx_=(pts[0].x+pts[1].x+pts[2].x+pts[3].x)/4,cy_=(pts[0].y+pts[1].y+pts[2].y+pts[3].y)/4;
+    let isSel=sel===i,isHov=hov===i,isSrch=false;
+    if(sq){let q=sq.toLowerCase();isSrch=TILES[i].name.toLowerCase().includes(q)||TILES[i].tags.some(tg=>tg.toLowerCase().includes(q))||TILES[i].domain.includes(q);}
+    if(!sq&&!isSel&&!isHov&&z<80)continue;
+    if(!sq&&!isSel&&!isHov&&z<120&&i%3!==0)continue;
+    let fs=Math.min(14,Math.max(8,z*0.08));
+    cx.font=fs+"px 'Segoe UI',system-ui,sans-serif";
+    cx.textAlign="center";cx.textBaseline="middle";
+    if(isHov||isSel||isSrch){cx.shadowColor=TILES[i].color;cx.shadowBlur=isSrch?12:0;}
+    cx.fillStyle=isSel?"#fff":"rgba(200,200,220,0.7)";
+    cx.globalAlpha=isSel||isSrch?1:isHov?0.85:0.5;
+    let lb=TILES[i].name.length>18?TILES[i].name.slice(0,16)+"...":TILES[i].name;
+    cx.fillText(lb,cx_,cy_);cx.shadowBlur=0;cx.globalAlpha=1;
+    cx.beginPath();cx.arc(cx_-6-fs*0.3,cy_,3,0,Math.PI*2);
+    cx.fillStyle=TILES[i].color;cx.globalAlpha=0.8;cx.fill();cx.globalAlpha=1;
+  }
+  document.getElementById("tile-count").textContent=TILES.length+" tiles | "+RHO.length+" rhombi";
+}
+
+function ptInPoly(x,y,pts){let inside=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){let xi=pts[i].x,yi=pts[i].y,xj=pts[j].x,yj=pts[j].y;if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;}return inside;}
+
+function hitTest(mx,my){
+  let best=-1,bestD=Infinity;
+  for(let i=0;i<RHO.length;i++){let pts=sv(RHO[i]);if(ptInPoly(mx,my,pts)){let d=(pts[0].x-mx)**2+(pts[0].y-my)**2;if(d<bestD){bestD=d;best=i;}}}
+  if(best>=0)return TILES.findIndex(t=>t.rIdx===best);
+  return -1;
+}
+
+function showTooltip(x,y,tile){
+  let tt=document.getElementById("tooltip");
+  tt.style.display="block";tt.style.left=Math.min(x+12,window.innerWidth-340)+"px";tt.style.top=Math.min(y+12,window.innerHeight-200)+"px";
+  tt.innerHTML='<div class="tt-name" style="border-left:2px solid '+tile.color+';padding-left:10px">'+tile.name+'</div><div class="tt-domain">'+(DN[tile.domain]||tile.domain)+'</div><div class="tt-desc">'+tile.desc+'</div>'+(tile.connections&&tile.connections.length?'<div class="tt-conn">'+tile.connections.length+' cross-references</div>':"");
+}
+function hideTooltip(){document.getElementById("tooltip").style.display="none";}
+
+function showDetail(idx){
+  let tile=TILES[idx];if(!tile)return;
+  let d=document.getElementById("detail");
+  d.classList.add("open");
+  let ch=tile.connections&&tile.connections.length?tile.connections.map(c=>{let ct=TILES.find(t=>t.id===c);let dc=ct?DC[ct.domain]:"#444";return '<div class="d-conn-item"><span class="dot" style="background:'+dc+'"></span>'+(ct?'<a href="#" onclick="selectByConnection(\''+c+'\');return false" style="color:#999;text-decoration:none">'+ct.name+"</a>":'<span style="color:#555">'+c+"</span>")+"</div>";}).join(""):'<div style="color:#444;font-size:13px">No cross-references</div>';
+  d.innerHTML='<div class="d-header"><button class="d-close" onclick="hideDetail()">&times;</button><div class="d-name">'+tile.name+'</div><div class="d-domain" style="color:'+tile.color+'">'+(DN[tile.domain]||tile.domain)+"</div></div>"+
+    '<div class="d-body"><div class="d-desc">'+tile.desc+'</div><div class="d-label">Tags</div><div class="d-tags">'+
+    tile.tags.map(t=>'<span class="d-tag">'+t+"</span>").join("")+'</div><div class="d-label">Cross-References</div>'+ch+
+    '</div>';
+}
+
+function hideDetail(){document.getElementById("detail").classList.remove("open");sel=-1;drw();}
+
+function selectByConnection(cid){
+  let idx=TILES.findIndex(t=>t.id===cid);
+  if(idx>=0){hideDetail();sel=idx;drw();showDetail(idx);}
+}
+
+// Events
+ca.addEventListener("mousedown",e=>{
+  let r=ca.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let hit=hitTest(mx,my);
+  if(hit>=0){sel=hit;showDetail(hit);drw();}else{dx=mx;dy=my;dr=true;}
+});
+ca.addEventListener("mousemove",e=>{
+  let r=ca.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(dr){vx+=mx-dx;vy+=my-dy;dx=mx;dy=my;drw();}else{
+    let hit=hitTest(mx,my);
+    if(hit!==hov){hov=hit;drw();if(hit>=0)showTooltip(e.clientX,e.clientY,TILES[hit]);else hideTooltip();}
+  }
+});
+ca.addEventListener("mouseup",()=>{dr=false;});
+ca.addEventListener("mouseleave",()=>{dr=false;hov=-1;hideTooltip();drw();});
+ca.addEventListener("wheel",e=>{
+  e.preventDefault();
+  let r=ca.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let wx=(mx-ca.width/2-vx)/z,wy=(my-ca.height/2-vy)/z;
+  z=Math.max(20,Math.min(500,z*(1-e.deltaY*0.02)));vx=mx-ca.width/2-wx*z;vy=my-ca.height/2-wy*z;drw();
+},{passive:false});
+document.getElementById("zoom-in").addEventListener("click",()=>{z=Math.min(500,z*1.3);drw();});
+document.getElementById("zoom-out").addEventListener("click",()=>{z=Math.max(20,z/1.3);drw();});
+document.getElementById("reset-view").addEventListener("click",()=>{vx=0;vy=0;z=100;sel=-1;hideTooltip();hideDetail();drw();});
+
+// Search
+document.getElementById("search").addEventListener("input",e=>{sq=e.target.value;drw();if(sq)sel=-1;});
+document.getElementById("search").addEventListener("keydown",e=>{if(e.key==="Escape"){e.target.value="";sq="";drw();e.target.blur();}});
+
+// Init
+drw();
+</script>
+</body>
+</html>
